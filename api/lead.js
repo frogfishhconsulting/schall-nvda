@@ -13,6 +13,8 @@ const CASE = { ticker: 'INTC', start: '2026-07-23', end: '2026-10-29' };
 const TIERS = [['A', 1000000], ['B', 500000], ['C', 100000], ['D', 0]];
 // Value sent to ad platforms per tier, so bidding favors bigger investors. Relative weights, not dollars owed.
 const TIER_VALUE = { A: 1000, B: 400, C: 100, D: 10 };
+// Leads at or above this class-period cost basis get the priority booking link.
+const PRIORITY_MIN = 500000;
 
 const sha = (v) => crypto.createHash('sha256').update(String(v).trim().toLowerCase()).digest('hex');
 const tierFor = (basis) => (TIERS.find(([, min]) => basis >= min) || ['D'])[0];
@@ -35,6 +37,7 @@ function score(purchases) {
     first_purchase: inPeriod.map((p) => p.date).sort()[0] || null,
     last_purchase: inPeriod.map((p) => p.date).sort().slice(-1)[0] || null,
     lead_tier: tier,
+    priority: basis >= PRIORITY_MIN,
     value: TIER_VALUE[tier],
   };
 }
@@ -96,9 +99,9 @@ module.exports = async (req, res) => {
     const fmt = (n) => '$' + Number(n).toLocaleString('en-US');
     const src = [record.utm_source, record.utm_campaign].filter(Boolean).join(' / ') || (record.gclid ? 'google' : record.fbclid ? 'meta' : 'direct');
     jobs.push(post(process.env.SLACK_WEBHOOK_URL, {
-      text: `New INTC lead: Tier ${s.lead_tier} | ${fmt(s.class_period_cost_basis)} cost basis | ${record.first_name} ${record.last_name}`,
+      text: `${s.priority ? 'PRIORITY ' : ''}New INTC lead: Tier ${s.lead_tier} | ${fmt(s.class_period_cost_basis)} cost basis | ${record.first_name} ${record.last_name}`,
       blocks: [
-        { type: 'section', text: { type: 'mrkdwn', text: `*New INTC lead: Tier ${s.lead_tier}*\n*${record.first_name} ${record.last_name}*  |  ${record.phone}  |  ${record.email}` } },
+        { type: 'section', text: { type: 'mrkdwn', text: `${s.priority ? ':star: *PRIORITY: booking link shown*\n' : ''}*New INTC lead: Tier ${s.lead_tier}*\n*${record.first_name} ${record.last_name}*  |  ${record.phone}  |  ${record.email}` } },
         { type: 'section', fields: [
           { type: 'mrkdwn', text: `*Class period cost basis*\n${fmt(s.class_period_cost_basis)}` },
           { type: 'mrkdwn', text: `*Shares / avg cost*\n${s.class_period_shares.toLocaleString('en-US')} @ $${s.avg_cost_per_share}` },
@@ -121,5 +124,5 @@ module.exports = async (req, res) => {
   await Promise.all(jobs);
   console.log(`[lead] ${record.lead_id} tier=${s.lead_tier} basis=${s.class_period_cost_basis} src=${record.utm_source || record.gclid ? 'paid' : 'direct'}`);
 
-  return res.status(200).json({ ok: true, lead_tier: s.lead_tier, value: s.value });
+  return res.status(200).json({ ok: true, lead_tier: s.lead_tier, priority: s.priority, value: s.value });
 };

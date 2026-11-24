@@ -15,6 +15,10 @@
   window.SBS_CONFIG = {
     gtmId: "",          // e.g. "GTM-XXXXXXX"
     metaPixelId: "",    // e.g. "123456789012345"
+    // Priority leads (class-period cost basis at or above this) get a booking link on the thank-you screen.
+    priorityMin: 500000,
+    calendlyUrl: "https://calendly.com/schallfirm-adam/intc-priority-review", // TEMPLATE: swap in Adam's real Calendly link
+    calendlyName: "Adam",
     caseStart: "2026-07-23",
     caseEnd: "2026-10-29",
     deadline: "2027-01-12",
@@ -123,6 +127,16 @@
   .err{color:var(--red);font-size:14px;margin:10px 0 0}
   .err:empty{display:none}
   .badge{width:48px;height:48px;border-radius:50%;background:#e8f3ec;display:grid;place-items:center;margin-bottom:16px}
+  .priority{border:1px solid #e4d6b8;background:linear-gradient(180deg,#fffdf7,#fff);border-radius:10px;padding:22px 22px 20px;margin:6px 0 4px}
+  .pri-tag{display:inline-block;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:500;color:#8a6a1f;background:#f8efd9;padding:4px 10px;border-radius:20px}
+  .pri-q{font-size:19px;font-weight:500;color:var(--navy);margin:12px 0 4px;line-height:1.35}
+  .pri-sub{font-size:15px;color:var(--muted);margin:0 0 16px}
+  .pri-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+  .pri-stats>div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .pri-stats .k{display:block;font-size:11.5px;color:var(--muted);letter-spacing:.04em}
+  .pri-stats .v{display:block;font-size:18px;font-weight:500;color:var(--navy)}
+  .pri-btn{width:100%;padding:15px 22px;font-size:15px;text-align:center}
+  .pri-note{margin:12px 0 0;font-size:14px;color:#2f6b4f;font-weight:500}
   .soft{background:var(--soft);border-radius:8px;padding:16px 18px;font-size:15px;color:#4a5566;margin-top:18px}
 
   section.blk{padding:104px 0}
@@ -281,7 +295,20 @@
         <div class="step" data-step="done">
           <div class="badge"><svg width="22" height="22" viewBox="0 0 20 20" fill="none"><path d="M4 10.5l4 4 8-9" stroke="#2f6b4f" stroke-width="2.2"/></svg></div>
           <p class="q">Thank you. We've received your information.</p>
-          <p class="hint">The firm's case team will review your purchases and may reach out to talk about your losses and next steps.</p>
+          <p class="hint">Someone from the firm will be in touch within 48 hours.</p>
+
+          <div class="priority" id="priority" hidden>
+            <div class="pri-tag">Priority review</div>
+            <p class="pri-q">Skip the wait and book a call with <span class="cal-name">Adam</span>.</p>
+            <p class="pri-sub">Based on your purchases, your case is a priority for the firm. Pick a time that works for you.</p>
+            <div class="pri-stats">
+              <div><span class="k">Cost basis in class period</span><span class="v" id="priBasis"></span></div>
+              <div><span class="k">Purchases in class period</span><span class="v" id="priCount"></span></div>
+            </div>
+            <button type="button" class="btn-red pri-btn" id="bookBtn">Book a time with <span class="cal-name">Adam</span></button>
+            <p class="pri-note" id="bookedNote" hidden>You're booked. A calendar invite is on its way to your email.</p>
+          </div>
+
           <div class="soft">To speed things up, gather the trade confirmations or statements showing your INTC purchases and sales from July 2026 onward. Questions? Call <a href="tel:+13103013335">(310) 301-3335</a>.</div>
         </div>
       </form>
@@ -498,6 +525,40 @@
     go('2');
   });
 
+  /* Priority booking (Calendly) */
+  document.querySelectorAll('.cal-name').forEach(function(n){ n.textContent = C.calendlyName; });
+  function loadCalendly(cb){
+    if (window.Calendly) return cb();
+    var l=document.createElement('link'); l.rel='stylesheet'; l.href='https://assets.calendly.com/assets/external/widget.css'; document.head.appendChild(l);
+    var sc=document.createElement('script'); sc.src='https://assets.calendly.com/assets/external/widget.js'; sc.onload=cb; document.head.appendChild(sc);
+  }
+  function showPriority(lead, basis, count, eventId, lt){
+    var inPeriod = purchases().filter(function(p){ return p.in_period; }).length;
+    document.getElementById('priBasis').textContent = money(basis);
+    document.getElementById('priCount').textContent = inPeriod;
+    document.getElementById('priority').hidden = false;
+    track('priority_offer_shown', {lead_tier: lt, cost_basis: Math.round(basis), event_id: eventId});
+    loadCalendly(function(){});
+    document.getElementById('bookBtn').onclick = function(){
+      track('priority_book_click', {lead_tier: lt, event_id: eventId});
+      var url = C.calendlyUrl + (C.calendlyUrl.indexOf('?')>-1?'&':'?') + 'utm_source=intc_lp&utm_campaign=priority_' + lt + '&utm_content=' + encodeURIComponent(eventId);
+      loadCalendly(function(){
+        window.Calendly.initPopupWidget({url: url, prefill: {
+          name: lead.first_name + ' ' + lead.last_name, email: lead.email,
+          customAnswers: {a1: lead.phone, a2: money(basis) + ' cost basis, ' + count + ' purchase(s), tier ' + lt}
+        }});
+      });
+    };
+    window.addEventListener('message', function(e){
+      if (e.data && e.data.event === 'calendly.event_scheduled'){
+        document.getElementById('bookedNote').hidden = false;
+        document.getElementById('bookBtn').hidden = true;
+        track('priority_call_booked', {lead_tier: lt, event_id: eventId});
+        if (window.fbq) fbq('track', 'Schedule', {content_category: 'INTC', lead_tier: lt}, {eventID: eventId + '_schedule'});
+      }
+    });
+  }
+
   function tier(b){ for (var i=0;i<C.tiers.length;i++){ if (b >= C.tiers[i][1]) return C.tiers[i][0]; } return 'D'; }
 
   form.addEventListener('submit', function(ev){
@@ -531,6 +592,8 @@
         track('lead_submit', {lead_tier: lt, cost_basis: Math.round(basis), value: res.value || 0, currency: 'USD', event_id: eventId,
           user_data: {email: payload.email, phone_number: payload.phone}});
         if (window.fbq) fbq('track', 'Lead', {content_category: 'INTC', lead_tier: lt, value: res.value || 0, currency: 'USD'}, {eventID: eventId});
+        var isPriority = res.priority != null ? res.priority : basis >= C.priorityMin;
+        if (isPriority) showPriority(payload, basis, ps.length, eventId, lt);
         go('done');
       })
       .catch(function(){

@@ -88,7 +88,13 @@
   .trow{margin-bottom:12px}
   .trow input{width:100%;padding:13px 12px;border:1px solid #d5dbe5;border-radius:6px;font:inherit;font-size:16px;color:var(--ink);background:#fff;min-width:0}
   .trow input:focus,label.f input:focus{outline:none;border-color:var(--steel);box-shadow:0 0 0 3px rgba(91,111,155,.15)}
-  .trow input.out{border-color:#e0b252;background:#fffbf2}
+  .trow{border-radius:8px;transition:background .15s, box-shadow .15s}
+  .trow.out-row{background:#fdf0f0;box-shadow:0 0 0 8px #fdf0f0}
+  .trow.out-row input{border-color:#e8b4b4}
+  .trow input.out{border-color:var(--red);background:#fff;color:var(--red);font-weight:500}
+  .trow .rowmsg{grid-column:1/-1;display:none;font-size:13px;color:var(--red);margin-top:-2px}
+  .trow.out-row .rowmsg{display:flex;align-items:center;gap:6px}
+  .trow.out-row + .trow{margin-top:18px}
   .trow .px{position:relative}
   .trow .px:before{content:"$";position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px}
   .trow .px input{padding-left:24px}
@@ -100,7 +106,7 @@
   .basis>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
   .basis .k{font-size:14px;color:var(--muted)}
   .basis .v{font-size:24px;font-weight:500;color:var(--navy)}
-  .warn{margin:6px 0 0;font-size:13.5px;color:#8a5a12}
+  .warn{margin:6px 0 0;font-size:13.5px;color:var(--red)}
   .warn:empty{display:none}
 
   .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -439,7 +445,8 @@
     r.innerHTML = '<input type="date" class="td" min="2026-01-01" max="2026-12-31" aria-label="Purchase date">' +
       '<input type="number" class="ts" min="0" step="1" inputmode="numeric" placeholder="1,000" aria-label="Shares">' +
       '<span class="px"><input type="number" class="tp" min="0" step="0.01" inputmode="decimal" placeholder="0.00" aria-label="Price per share"></span>' +
-      '<button type="button" class="rm" aria-label="Remove purchase">&times;</button>';
+      '<button type="button" class="rm" aria-label="Remove purchase">&times;</button>' +
+      '<span class="rowmsg"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#9d2121" stroke-width="1.5"/><path d="M8 4.5v4.2M8 11v.5" stroke="#9d2121" stroke-width="1.6" stroke-linecap="round"/></svg>Outside the class period (Jul 23 to Oct 29, 2026). Not counted.</span>';
     r.querySelector('.rm').addEventListener('click', function(){ if (rowsEl.children.length > 1) { r.remove(); calc(); } });
     r.querySelectorAll('input').forEach(function(i){ i.addEventListener('input', calc); });
     rowsEl.appendChild(r);
@@ -455,11 +462,12 @@
     var ps = purchases(), basis = 0, outside = 0;
     ps.forEach(function(p){
       p.el.querySelector('.td').classList.toggle('out', !!p.date && !p.in_period);
+      p.el.classList.toggle('out-row', !!p.date && !p.in_period);
       if (p.date && !p.in_period) outside++;
       if (p.in_period) basis += p.shares * p.price;
     });
     document.getElementById('basis').textContent = money(basis);
-    document.getElementById('warn').textContent = outside ? 'Purchases outside July 23 to October 29, 2026 are not part of this class and are not counted.' : '';
+    document.getElementById('warn').textContent = outside ? (outside === 1 ? '1 purchase is' : outside + ' purchases are') + ' outside the class period and not counted.' : '';
     return basis;
   }
   addRow();

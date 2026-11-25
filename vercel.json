@@ -1,3 +1,6 @@
 {
-  "cleanUrls": true
+  "cleanUrls": true,
+  "redirects": [
+    { "source": "/((?!api/).*)", "destination": "https://schallfirm.com", "permanent": false }
+  ]
 }

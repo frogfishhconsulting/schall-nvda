@@ -6,6 +6,7 @@
 // Set these in Vercel: Project > Settings > Environment Variables.
 
 const crypto = require('crypto');
+const pd = require('../lib/pipedrive');
 
 const CASE = { ticker: 'INTC', start: '2026-07-23', end: '2026-10-29' };
 
@@ -40,6 +41,44 @@ function score(purchases) {
     priority: basis >= PRIORITY_MIN,
     value: TIER_VALUE[tier],
   };
+}
+
+// Push the lead into Pipedrive (person + lead + note), if the firm has connected Pipedrive.
+async function pushPipedrive(r, s) {
+  const t = await pd.loadTokens().catch(() => null);
+  if (!t) return false;
+  const fmt = (n) => '$' + Number(n).toLocaleString('en-US');
+  try {
+    let personId;
+    const found = await pd.api('GET', `/api/v2/persons/search?term=${encodeURIComponent(r.email)}&fields=email&exact_match=true&limit=1`);
+    personId = found?.data?.items?.[0]?.item?.id;
+    if (!personId) {
+      const created = await pd.api('POST', '/api/v2/persons', {
+        name: `${r.first_name} ${r.last_name}`.trim(),
+        emails: [{ value: r.email, primary: true, label: 'work' }],
+        phones: [{ value: r.phone, primary: true, label: 'mobile' }],
+      });
+      personId = created.data.id;
+    }
+    const lead = await pd.api('POST', '/api/v1/leads', {
+      title: `INTC | Tier ${s.lead_tier}${s.priority ? ' PRIORITY' : ''} | ${r.first_name} ${r.last_name} | ${fmt(s.class_period_cost_basis)}`,
+      person_id: personId,
+      value: { amount: s.class_period_cost_basis, currency: 'USD' },
+    });
+    const rows = s.purchases.map((p) => `<li>${p.date}: ${p.shares.toLocaleString('en-US')} sh @ $${p.price}${p.date >= CASE.start && p.date <= CASE.end ? '' : ' (outside class period)'}</li>`).join('');
+    const src = [r.utm_source, r.utm_medium, r.utm_campaign].filter(Boolean).join(' / ') || (r.gclid ? 'google (gclid)' : r.fbclid ? 'meta (fbclid)' : 'direct');
+    await pd.api('POST', '/api/v1/notes', {
+      lead_id: lead.data.id,
+      content: `<b>INTC intake: Tier ${s.lead_tier}${s.priority ? ' (priority, booking link shown)' : ''}</b><br>` +
+        `Class period cost basis: <b>${fmt(s.class_period_cost_basis)}</b><br>` +
+        `Shares in period: ${s.class_period_shares.toLocaleString('en-US')} @ avg $${s.avg_cost_per_share}<br>` +
+        `Purchases:<ul>${rows}</ul>Source: ${src}<br>Lead ID: ${r.lead_id}`,
+    });
+    return true;
+  } catch (e) {
+    console.error('[lead] pipedrive', e.message);
+    return false;
+  }
 }
 
 async function post(url, body, label) {
@@ -120,6 +159,8 @@ module.exports = async (req, res) => {
     if (process.env.META_TEST_EVENT_CODE) body.test_event_code = process.env.META_TEST_EVENT_CODE;
     jobs.push(post(`https://graph.facebook.com/${v}/${process.env.META_PIXEL_ID}/events?access_token=${process.env.META_CAPI_TOKEN}`, body, 'meta_capi'));
   }
+
+  jobs.push(pushPipedrive(record, s));
 
   await Promise.all(jobs);
   console.log(`[lead] ${record.lead_id} tier=${s.lead_tier} basis=${s.class_period_cost_basis} src=${record.utm_source || record.gclid ? 'paid' : 'direct'}`);

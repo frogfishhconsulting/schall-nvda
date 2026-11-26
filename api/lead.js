@@ -72,7 +72,8 @@ async function pushPipedrive(r, s) {
       content: `<b>INTC intake: Tier ${s.lead_tier}${s.priority ? ' (priority, booking link shown)' : ''}</b><br>` +
         `Class period cost basis: <b>${fmt(s.class_period_cost_basis)}</b><br>` +
         `Shares in period: ${s.class_period_shares.toLocaleString('en-US')} @ avg $${s.avg_cost_per_share}<br>` +
-        `Purchases:<ul>${rows}</ul>Source: ${src}<br>Lead ID: ${r.lead_id}`,
+        `Purchases:<ul>${rows}</ul>Source: ${src}<br>` +
+        `Consent: SMS/calls ${r.consent?.sms_calls ? 'YES' : 'NO'}, email updates ${r.consent?.email_updates ? 'YES' : 'NO'} (captured ${r.consent?.captured_at || r.received_at}, IP ${r.consent?.ip || 'n/a'}, ${r.consent?.version || ''})<br>Lead ID: ${r.lead_id}`,
     });
     return true;
   } catch (e) {
@@ -127,6 +128,7 @@ module.exports = async (req, res) => {
     ...s,
     case: CASE.ticker,
     received_at: new Date().toISOString(),
+    consent: { ...(lead.consent || {}), ip: (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || null, user_agent: req.headers['user-agent'] || null },
     lead_id: lead.event_id,
   };
 
@@ -146,6 +148,7 @@ module.exports = async (req, res) => {
           { type: 'mrkdwn', text: `*Shares / avg cost*\n${s.class_period_shares.toLocaleString('en-US')} @ $${s.avg_cost_per_share}` },
           { type: 'mrkdwn', text: `*Purchases in period*\n${s.class_period_purchases} (${s.first_purchase || '-'} to ${s.last_purchase || '-'})` },
           { type: 'mrkdwn', text: `*Source*\n${src}` },
+          { type: 'mrkdwn', text: `*OK to text/call*\n${record.consent?.sms_calls ? 'Yes' : 'No'}` },
         ] },
       ],
     }, 'slack'));

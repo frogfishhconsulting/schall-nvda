@@ -116,7 +116,13 @@
   .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   label.f{display:block;font-size:14px;font-weight:500;color:#3b4656;margin:0 0 16px}
   label.f input{display:block;width:100%;margin-top:6px;padding:13px 14px;border:1px solid #d5dbe5;border-radius:6px;font:inherit;font-size:16px;color:var(--ink);background:#fff}
-  .consent{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted);line-height:1.55;margin:4px 0 22px}
+  .adv-strip{background:var(--navy);color:#c9d2e3;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;text-align:center;padding:6px 12px}
+  .consents{border-top:1px solid var(--line);padding-top:16px;margin-top:2px}
+  .consent a{color:var(--steel)}
+  .consent em{font-style:normal;color:#8a94a3}
+  .consent.req em{color:var(--red)}
+  .confnote{font-size:12.5px;color:var(--muted);margin:-8px 0 18px;padding-left:26px}
+  .consent{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted);line-height:1.55;margin:0 0 14px}
   .consent input{margin-top:3px;flex:none}
   .btn{display:block;width:100%;background:var(--navy);color:#fff;border:0;padding:16px 22px;border-radius:6px;font:inherit;font-weight:500;font-size:16px;cursor:pointer;transition:background .15s}
   .btn:hover{background:#1f3567}
@@ -218,6 +224,7 @@
 </head>
 <body>
 
+<div class="adv-strip">Attorney Advertising</div>
 <header class="top">
   <div class="wrap">
     <a class="logo" href="https://schallfirm.com" aria-label="Schall, Brown & Schwartz LLP home"><img src="/assets/sbs-logo.png" alt="Schall, Brown & Schwartz LLP" width="362" height="84"></a>
@@ -283,9 +290,18 @@
           </div>
           <label class="f">Email<input name="email" type="email" autocomplete="email" required></label>
           <label class="f">Phone<input name="phone" type="tel" autocomplete="tel" required></label>
-          <label class="consent"><input type="checkbox" name="consent" required>
-            <span>I understand that submitting this form does not create an attorney-client relationship, and I agree that Schall, Brown &amp; Schwartz LLP may contact me by phone, text, or email about this matter.</span>
-          </label>
+          <div class="consents">
+            <label class="consent req"><input type="checkbox" name="ack" required>
+              <span id="ackText">I understand that submitting this form does not create an attorney-client relationship, and that the firm will decide whether to contact me. I agree to the <a href="https://schallfirm.com/terms-and-conditions/" target="_blank" rel="noopener">Terms</a>, <a href="https://schallfirm.com/privacy-policy/" target="_blank" rel="noopener">Privacy Policy</a> and <a href="https://schallfirm.com/disclaimer/" target="_blank" rel="noopener">Disclaimer</a>. <em>(Required)</em></span>
+            </label>
+            <label class="consent"><input type="checkbox" name="sms_consent">
+              <span id="smsText">I agree that Schall, Brown &amp; Schwartz LLP may call and text me about this matter at the number above, including by automated means. Consent is not a condition of submitting this form or hiring the firm. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help. <em>(Optional)</em></span>
+            </label>
+            <label class="consent"><input type="checkbox" name="email_updates">
+              <span id="emailText">Send me email updates about the Intel case. You can unsubscribe at any time. <em>(Optional)</em></span>
+            </label>
+          </div>
+          <p class="confnote">Your information is kept confidential. Please don't include account numbers or other sensitive details in this form.</p>
           <input type="text" name="company_website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
           <button type="submit" class="btn" id="submitBtn">Submit for free review</button>
           <p class="err" id="err"></p>
@@ -400,10 +416,11 @@
   <div class="wrap">
     <img src="/assets/sbs-logo-white.png" alt="Schall, Brown & Schwartz LLP" width="320" height="74">
     <p class="addr">2049 Century Park East, Suite 2460, Los Angeles, CA 90067 &middot; <a href="tel:+13103013335">(310) 301-3335</a> &middot; <a href="mailto:info@schallfirm.com">info@schallfirm.com</a></p>
-    <p><strong>Attorney Advertising.</strong> This page may be considered attorney advertising in some jurisdictions under the applicable law and rules of ethics. Prior results do not guarantee a similar outcome.</p>
-    <p>The class in this case has not yet been certified. Until certification occurs, you are not represented by an attorney. If you choose to take no action, you may remain an absent class member. Submitting information through this page does not create an attorney-client relationship, and the firm will decide in its sole discretion whether to contact you.</p>
+    <p><strong>Attorney Advertising.</strong> This page may be considered attorney advertising in some jurisdictions under the applicable law and rules of ethics. Prior results do not guarantee a similar outcome. Attorney responsible for this communication: Brian Schall, Schall, Brown &amp; Schwartz LLP, 2049 Century Park East, Suite 2460, Los Angeles, CA 90067.</p>
+    <p><strong>No attorney-client relationship.</strong> Contacting the firm or submitting information through this page does not create an attorney-client relationship. An attorney-client relationship is formed only by a signed written agreement with the firm. Information you submit is kept confidential.</p>
+    <p>The class in this case has not yet been certified. Until certification occurs, you are not represented by an attorney. If you choose to take no action, you may remain an absent class member. The firm will decide in its sole discretion whether to contact you.</p>
     <p>The statements on this page describe allegations in a complaint and are not findings of fact.</p>
-    <p><a href="https://schallfirm.com">schallfirm.com</a> &middot; &copy; 2026 Schall, Brown &amp; Schwartz LLP</p>
+    <p><a href="https://schallfirm.com/privacy-policy/">Privacy Policy</a> &middot; <a href="https://schallfirm.com/terms-and-conditions/">Terms &amp; Conditions</a> &middot; <a href="https://schallfirm.com/disclaimer/">Disclaimer</a> &middot; &copy; 2026 Schall, Brown &amp; Schwartz LLP</p>
   </div>
 </footer>
 
@@ -570,7 +587,7 @@
     for (var i=0;i<req.length;i++){ if (!String(fd.get(req[i])||'').trim()){ err.textContent = 'Please fill in your name, email, and phone.'; return; } }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fd.get('email'))){ err.textContent = 'Please enter a valid email address.'; return; }
     if (String(fd.get('phone')).replace(/\D/g,'').length < 10){ err.textContent = 'Please enter a valid phone number.'; return; }
-    if (!fd.get('consent')){ err.textContent = 'Please check the box to continue.'; return; }
+    if (!fd.get('ack')){ err.textContent = 'Please check the required box to continue.'; return; }
 
     var ps = purchases().filter(function(p){ return p.date && p.shares && p.price; })
       .map(function(p){ return {date: p.date, shares: p.shares, price: p.price}; });
@@ -579,7 +596,17 @@
     var payload = Object.assign({
       case: 'INTC', purchases: ps,
       first_name: fd.get('first_name').trim(), last_name: fd.get('last_name').trim(),
-      email: fd.get('email').trim(), phone: fd.get('phone').trim(), consent: true, event_id: eventId,
+      email: fd.get('email').trim(), phone: fd.get('phone').trim(), event_id: eventId,
+      consent: {
+        acknowledged_no_relationship: true,
+        sms_calls: !!fd.get('sms_consent'),
+        email_updates: !!fd.get('email_updates'),
+        version: 'intc-2026-11-26',
+        ack_text: document.getElementById('ackText').textContent.trim(),
+        sms_text: fd.get('sms_consent') ? document.getElementById('smsText').textContent.trim() : null,
+        email_text: fd.get('email_updates') ? document.getElementById('emailText').textContent.trim() : null,
+        captured_at: new Date().toISOString()
+      },
       fbp: cookie('_fbp'), fbc: cookie('_fbc') || (attr.fbclid ? 'fb.1.' + Date.now() + '.' + attr.fbclid : ''),
       page_url: location.href, submitted_at: new Date().toISOString()
     }, attr);

@@ -23,7 +23,11 @@
     caseEnd: "2026-10-29",
     deadline: "2027-01-12",
     // Lead tiers by cost basis in the class period (USD). Mirrored server-side in api/lead.js.
-    tiers: [["A", 1000000], ["B", 500000], ["C", 100000], ["D", 0]]
+    tiers: [["A", 1000000], ["B", 500000], ["C", 100000], ["D", 0]],
+    // Purchase-window and amount buckets. "min" is the conservative cost basis used for scoring.
+    windows: [["2026-07","Jul 23 to 31"],["2026-08","August"],["2026-09","September"],["2026-10","Oct 1 to 29"],["outside","Other dates"]],
+    amounts: [["under_100k","Under $100K",0],["100k_250k","$100K to $250K",100000],["250k_500k","$250K to $500K",250000],
+              ["500k_1m","$500K to $1M",500000],["1m_5m","$1M to $5M",1000000],["over_5m","Over $5M",5000000]]
   };
   (function (c) {
     if (c.gtmId) {
@@ -116,6 +120,14 @@
   .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   label.f{display:block;font-size:14px;font-weight:500;color:#3b4656;margin:0 0 16px}
   label.f input{display:block;width:100%;margin-top:6px;padding:13px 14px;border:1px solid #d5dbe5;border-radius:6px;font:inherit;font-size:16px;color:var(--ink);background:#fff}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px}
+  .chips.amt{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:26px}
+  .chip-btn{font:inherit;font-size:15px;color:var(--ink);background:#fff;border:1px solid #d5dbe5;border-radius:8px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color .15s,background .15s,color .15s}
+  .chip-btn:hover{border-color:var(--steel)}
+  .chip-btn.sel{background:var(--navy);border-color:var(--navy);color:#fff}
+  .chip-btn.sel.out{background:#fdf0f0;border-color:var(--red);color:var(--red)}
+  .q2{margin-top:22px}
+  .chipwarn{margin:4px 0 0}
   .adv-strip{background:var(--navy);color:#c9d2e3;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;text-align:center;padding:6px 12px}
   .consent a{color:var(--steel)}
   .consent em{font-style:normal;color:#8a94a3}
@@ -265,17 +277,15 @@
       <form id="intake" novalidate>
         <div class="step active" data-step="1">
           <div class="stepcount">Step 1 of 2</div>
-          <p class="q">Your INTC purchases</p>
-          <p class="hint">Add each purchase you made between July 23 and October 29, 2026. Estimates are fine.</p>
-          <div class="trades">
-            <div class="th"><span>Date</span><span>Shares</span><span>Price paid</span><span></span></div>
-            <div id="rows"></div>
-          </div>
-          <button type="button" class="add" id="addRow">+ Add another purchase</button>
-          <div class="basis">
-            <div><span class="k">Your cost basis in the class period</span><span class="v" id="basis">$0</span></div>
-            <p class="warn" id="warn"></p>
-          </div>
+          <p class="q">When did you buy Intel (INTC)?</p>
+          <p class="hint">Select all that apply.</p>
+          <div class="chips" id="windows"></div>
+          <p class="warn chipwarn" id="warn"></p>
+
+          <p class="q q2">About how much did you invest between Jul 23 and Oct 29, 2026?</p>
+          <p class="hint">Your total cost for the shares you bought in that window.</p>
+          <div class="chips amt" id="amounts"></div>
+
           <button type="button" class="btn" id="next1">Continue</button>
           <p class="err" id="err1"></p>
         </div>
@@ -310,8 +320,8 @@
             <p class="pri-q">Skip the wait and book a call now.</p>
             <p class="pri-sub">Based on your purchases, your case is a priority for the firm. Pick a time that works for you.</p>
             <div class="pri-stats">
-              <div><span class="k">Cost basis in class period</span><span class="v" id="priBasis"></span></div>
-              <div><span class="k">Purchases in class period</span><span class="v" id="priCount"></span></div>
+              <div><span class="k">Amount invested</span><span class="v" id="priBasis"></span></div>
+              <div><span class="k">When you bought</span><span class="v" id="priCount"></span></div>
             </div>
             <button type="button" class="btn-red pri-btn" id="bookBtn">Book a call now</button>
             <p class="pri-note" id="bookedNote" hidden>You're booked. A calendar invite is on its way to your email.</p>
@@ -473,41 +483,32 @@
     a.addEventListener('click', function(){ track(a.getAttribute('data-track')); if (window.fbq) fbq('track','Contact'); });
   });
 
-  /* Purchases table */
-  var rowsEl = document.getElementById('rows');
+  /* Purchase buckets */
   function money(n){ return '$' + Math.round(n).toLocaleString('en-US'); }
-  function addRow(){
-    var r = document.createElement('div'); r.className = 'trow';
-    r.innerHTML = '<input type="date" class="td" min="2026-01-01" max="2026-12-31" aria-label="Purchase date">' +
-      '<input type="number" class="ts" min="0" step="1" inputmode="numeric" placeholder="1,000" aria-label="Shares">' +
-      '<span class="px"><input type="number" class="tp" min="0" step="0.01" inputmode="decimal" placeholder="0.00" aria-label="Price per share"></span>' +
-      '<button type="button" class="rm" aria-label="Remove purchase">&times;</button>' +
-      '<span class="rowmsg"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#9d2121" stroke-width="1.5"/><path d="M8 4.5v4.2M8 11v.5" stroke="#9d2121" stroke-width="1.6" stroke-linecap="round"/></svg>Outside the class period (Jul 23 to Oct 29, 2026). Not counted.</span>';
-    r.querySelector('.rm').addEventListener('click', function(){ if (rowsEl.children.length > 1) { r.remove(); calc(); } });
-    r.querySelectorAll('input').forEach(function(i){ i.addEventListener('input', calc); });
-    rowsEl.appendChild(r);
-  }
-  function purchases(){
-    return Array.prototype.map.call(rowsEl.children, function(r){
-      var date = r.querySelector('.td').value, sh = parseFloat(r.querySelector('.ts').value), px = parseFloat(r.querySelector('.tp').value);
-      return { date: date, shares: isNaN(sh) ? 0 : sh, price: isNaN(px) ? 0 : px,
-               in_period: !!date && date >= C.caseStart && date <= C.caseEnd, el: r };
-    });
-  }
-  function calc(){
-    var ps = purchases(), basis = 0, outside = 0;
-    ps.forEach(function(p){
-      p.el.querySelector('.td').classList.toggle('out', !!p.date && !p.in_period);
-      p.el.classList.toggle('out-row', !!p.date && !p.in_period);
-      if (p.date && !p.in_period) outside++;
-      if (p.in_period) basis += p.shares * p.price;
-    });
-    document.getElementById('basis').textContent = money(basis);
-    document.getElementById('warn').textContent = outside ? (outside === 1 ? '1 purchase is' : outside + ' purchases are') + ' outside the class period and not counted.' : '';
-    return basis;
-  }
-  addRow();
-  document.getElementById('addRow').addEventListener('click', addRow);
+  var sel = { windows: [], amount: null };
+  function chip(label, onClick){ var b=document.createElement('button'); b.type='button'; b.className='chip-btn'; b.textContent=label; b.addEventListener('click', function(){ onClick(b); }); return b; }
+  var winEl = document.getElementById('windows'), amtEl = document.getElementById('amounts');
+  C.windows.forEach(function(w){
+    winEl.appendChild(chip(w[1], function(b){
+      var i = sel.windows.indexOf(w[0]);
+      if (i > -1) sel.windows.splice(i,1); else sel.windows.push(w[0]);
+      b.classList.toggle('sel', i === -1);
+      b.classList.toggle('out', w[0] === 'outside');
+      var onlyOut = sel.windows.length && sel.windows.every(function(x){ return x === 'outside'; });
+      var anyOut = sel.windows.indexOf('outside') > -1;
+      document.getElementById('warn').textContent = onlyOut ? 'This case only covers purchases between July 23 and October 29, 2026.' : anyOut ? 'Only purchases between July 23 and October 29, 2026 count toward this case.' : '';
+    }));
+  });
+  C.amounts.forEach(function(a){
+    amtEl.appendChild(chip(a[1], function(b){
+      sel.amount = a[0];
+      amtEl.querySelectorAll('.chip-btn').forEach(function(x){ x.classList.remove('sel'); });
+      b.classList.add('sel');
+    }));
+  });
+  function amountInfo(){ var a = C.amounts.filter(function(x){ return x[0] === sel.amount; })[0]; return a ? {key:a[0], label:a[1], min:a[2]} : null; }
+  function windowLabels(){ return C.windows.filter(function(w){ return sel.windows.indexOf(w[0]) > -1 && w[0] !== 'outside'; }).map(function(w){ return w[1]; }); }
+  function calc(){ var a = amountInfo(); return a ? a.min : 0; }
 
   /* Stepper */
   var form = document.getElementById('intake'), history = ['1'], started = false;
@@ -525,12 +526,10 @@
 
   document.getElementById('next1').addEventListener('click', function(){
     var e1 = document.getElementById('err1'); e1.textContent = '';
-    var filled = purchases().filter(function(p){ return p.date || p.shares || p.price; });
-    if (!filled.length){ e1.textContent = 'Add at least one purchase.'; return; }
-    var bad = filled.filter(function(p){ return !p.date || !p.shares || !p.price; });
-    if (bad.length){ e1.textContent = 'Please add a date, shares, and price for each purchase.'; return; }
-    if (!filled.some(function(p){ return p.in_period; })){ e1.textContent = 'This case only covers purchases between July 23 and October 29, 2026. Questions? Call (310) 301-3335.'; return; }
-    track('intake_step', {step: '1', cost_basis: Math.round(calc())});
+    if (!sel.windows.length){ e1.textContent = 'Select when you bought.'; return; }
+    if (sel.windows.every(function(x){ return x === 'outside'; })){ e1.textContent = 'This case only covers purchases between July 23 and October 29, 2026. Questions? Call (310) 301-3335.'; return; }
+    if (!sel.amount){ e1.textContent = 'Select about how much you invested.'; return; }
+    track('intake_step', {step: '1', amount_bucket: sel.amount, windows: sel.windows.join(',')});
     go('2');
   });
 
@@ -542,11 +541,10 @@
     var sc=document.createElement('script'); sc.src='https://assets.calendly.com/assets/external/widget.js'; sc.onload=cb; document.head.appendChild(sc);
   }
   function showPriority(lead, basis, count, eventId, lt){
-    var inPeriod = purchases().filter(function(p){ return p.in_period; }).length;
-    document.getElementById('priBasis').textContent = money(basis);
-    document.getElementById('priCount').textContent = inPeriod;
+    document.getElementById('priBasis').textContent = amountInfo().label;
+    document.getElementById('priCount').textContent = windowLabels().join(', ');
     document.getElementById('priority').hidden = false;
-    track('priority_offer_shown', {lead_tier: lt, cost_basis: Math.round(basis), event_id: eventId});
+    track('priority_offer_shown', {lead_tier: lt, amount_bucket: sel.amount, event_id: eventId});
     loadCalendly(function(){});
     document.getElementById('bookBtn').onclick = function(){
       track('priority_book_click', {lead_tier: lt, event_id: eventId});
@@ -554,7 +552,7 @@
       loadCalendly(function(){
         window.Calendly.initPopupWidget({url: url, prefill: {
           name: lead.first_name + ' ' + lead.last_name, email: lead.email,
-          customAnswers: {a1: lead.phone, a2: money(basis) + ' cost basis, ' + count + ' purchase(s), tier ' + lt}
+          customAnswers: {a1: lead.phone, a2: amountInfo().label + ' invested, bought ' + windowLabels().join(', ') + ', tier ' + lt}
         }});
       });
     };
@@ -580,12 +578,10 @@
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fd.get('email'))){ err.textContent = 'Please enter a valid email address.'; return; }
     if (String(fd.get('phone')).replace(/\D/g,'').length < 10){ err.textContent = 'Please enter a valid phone number.'; return; }
 
-    var ps = purchases().filter(function(p){ return p.date && p.shares && p.price; })
-      .map(function(p){ return {date: p.date, shares: p.shares, price: p.price}; });
     var basis = calc(), t = tier(basis);
     var eventId = 'lead_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
     var payload = Object.assign({
-      case: 'INTC', purchases: ps,
+      case: 'INTC', purchase_windows: sel.windows.slice(), amount_bucket: sel.amount,
       first_name: fd.get('first_name').trim(), last_name: fd.get('last_name').trim(),
       email: fd.get('email').trim(), phone: fd.get('phone').trim(), event_id: eventId,
       consent: {
@@ -606,11 +602,11 @@
       .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
       .then(function(res){
         var lt = res.lead_tier || t;
-        track('lead_submit', {lead_tier: lt, cost_basis: Math.round(basis), value: res.value || 0, currency: 'USD', event_id: eventId,
+        track('lead_submit', {lead_tier: lt, amount_bucket: sel.amount, value: res.value || 0, currency: 'USD', event_id: eventId,
           user_data: {email: payload.email, phone_number: payload.phone}});
         if (window.fbq) fbq('track', 'Lead', {content_category: 'INTC', lead_tier: lt, value: res.value || 0, currency: 'USD'}, {eventID: eventId});
         var isPriority = res.priority != null ? res.priority : basis >= C.priorityMin;
-        if (isPriority) showPriority(payload, basis, ps.length, eventId, lt);
+        if (isPriority) showPriority(payload, basis, 0, eventId, lt);
         go('done');
       })
       .catch(function(){

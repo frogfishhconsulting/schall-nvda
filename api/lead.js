@@ -20,23 +20,26 @@ const PRIORITY_MIN = 500000;
 const sha = (v) => crypto.createHash('sha256').update(String(v).trim().toLowerCase()).digest('hex');
 const tierFor = (basis) => (TIERS.find(([, min]) => basis >= min) || ['D'])[0];
 
-function score(purchases) {
-  const clean = (Array.isArray(purchases) ? purchases : [])
-    .map((p) => ({ date: String(p.date || ''), shares: Number(p.shares) || 0, price: Number(p.price) || 0 }))
-    .filter((p) => p.date && p.shares > 0 && p.price > 0)
-    .slice(0, 50);
-  const inPeriod = clean.filter((p) => p.date >= CASE.start && p.date <= CASE.end);
-  const basis = inPeriod.reduce((sum, p) => sum + p.shares * p.price, 0);
-  const shares = inPeriod.reduce((sum, p) => sum + p.shares, 0);
+// Buckets mirror index.html. "min" is the conservative cost basis used for scoring.
+const WINDOWS = { '2026-07': 'Jul 23 to 31', '2026-08': 'August', '2026-09': 'September', '2026-10': 'Oct 1 to 29', outside: 'Other dates' };
+const AMOUNTS = {
+  under_100k: ['Under $100K', 0], '100k_250k': ['$100K to $250K', 100000], '250k_500k': ['$250K to $500K', 250000],
+  '500k_1m': ['$500K to $1M', 500000], '1m_5m': ['$1M to $5M', 1000000], over_5m: ['Over $5M', 5000000],
+};
+
+function score(lead) {
+  const windows = (Array.isArray(lead.purchase_windows) ? lead.purchase_windows : []).filter((w) => WINDOWS[w]);
+  const inPeriod = windows.filter((w) => w !== 'outside');
+  const amt = AMOUNTS[lead.amount_bucket] || AMOUNTS.under_100k;
+  const basis = inPeriod.length ? amt[1] : 0;
   const tier = tierFor(basis);
   return {
-    purchases: clean,
-    class_period_purchases: inPeriod.length,
-    class_period_shares: shares,
-    class_period_cost_basis: Math.round(basis),
-    avg_cost_per_share: shares ? Math.round((basis / shares) * 100) / 100 : 0,
-    first_purchase: inPeriod.map((p) => p.date).sort()[0] || null,
-    last_purchase: inPeriod.map((p) => p.date).sort().slice(-1)[0] || null,
+    purchase_windows: windows,
+    purchase_window_labels: inPeriod.map((w) => WINDOWS[w]),
+    also_bought_outside_period: windows.includes('outside'),
+    amount_bucket: lead.amount_bucket || null,
+    amount_label: amt[0],
+    est_cost_basis_min: basis,
     lead_tier: tier,
     priority: basis >= PRIORITY_MIN,
     value: TIER_VALUE[tier],
@@ -61,18 +64,17 @@ async function pushPipedrive(r, s) {
       personId = created.data.id;
     }
     const lead = await pd.api('POST', '/api/v1/leads', {
-      title: `INTC | Tier ${s.lead_tier}${s.priority ? ' PRIORITY' : ''} | ${r.first_name} ${r.last_name} | ${fmt(s.class_period_cost_basis)}`,
+      title: `INTC | Tier ${s.lead_tier}${s.priority ? ' PRIORITY' : ''} | ${r.first_name} ${r.last_name} | ${s.amount_label}`,
       person_id: personId,
-      value: { amount: s.class_period_cost_basis, currency: 'USD' },
+      value: { amount: s.est_cost_basis_min, currency: 'USD' },
     });
-    const rows = s.purchases.map((p) => `<li>${p.date}: ${p.shares.toLocaleString('en-US')} sh @ $${p.price}${p.date >= CASE.start && p.date <= CASE.end ? '' : ' (outside class period)'}</li>`).join('');
     const src = [r.utm_source, r.utm_medium, r.utm_campaign].filter(Boolean).join(' / ') || (r.gclid ? 'google (gclid)' : r.fbclid ? 'meta (fbclid)' : 'direct');
     await pd.api('POST', '/api/v1/notes', {
       lead_id: lead.data.id,
       content: `<b>INTC intake: Tier ${s.lead_tier}${s.priority ? ' (priority, booking link shown)' : ''}</b><br>` +
-        `Class period cost basis: <b>${fmt(s.class_period_cost_basis)}</b><br>` +
-        `Shares in period: ${s.class_period_shares.toLocaleString('en-US')} @ avg $${s.avg_cost_per_share}<br>` +
-        `Purchases:<ul>${rows}</ul>Source: ${src}<br>` +
+        `Amount invested in class period: <b>${s.amount_label}</b><br>` +
+        `Bought: ${s.purchase_window_labels.join(', ') || 'n/a'}${s.also_bought_outside_period ? ' (also bought outside the class period)' : ''}<br>` +
+        `Source: ${src}<br>` +
         `Consent: SMS/calls ${r.consent?.sms_calls ? 'YES' : 'NO'}, email updates ${r.consent?.email_updates ? 'YES' : 'NO'} (captured ${r.consent?.captured_at || r.received_at}, IP ${r.consent?.ip || 'n/a'}, ${r.consent?.version || ''})<br>Lead ID: ${r.lead_id}`,
     });
     return true;
@@ -122,7 +124,7 @@ module.exports = async (req, res) => {
   if (lead.company_website) return res.status(200).json({ ok: true }); // honeypot
   if (!lead.email || !lead.phone || !lead.first_name) return res.status(400).json({ ok: false, error: 'missing_fields' });
 
-  const s = score(lead.purchases);
+  const s = score(lead);
   const record = {
     ...lead,
     ...s,
@@ -140,13 +142,12 @@ module.exports = async (req, res) => {
     const fmt = (n) => '$' + Number(n).toLocaleString('en-US');
     const src = [record.utm_source, record.utm_campaign].filter(Boolean).join(' / ') || (record.gclid ? 'google' : record.fbclid ? 'meta' : 'direct');
     jobs.push(post(process.env.SLACK_WEBHOOK_URL, {
-      text: `${s.priority ? 'PRIORITY ' : ''}New INTC lead: Tier ${s.lead_tier} | ${fmt(s.class_period_cost_basis)} cost basis | ${record.first_name} ${record.last_name}`,
+      text: `${s.priority ? 'PRIORITY ' : ''}New INTC lead: Tier ${s.lead_tier} | ${s.amount_label} | ${record.first_name} ${record.last_name}`,
       blocks: [
         { type: 'section', text: { type: 'mrkdwn', text: `${s.priority ? ':star: *PRIORITY: booking link shown*\n' : ''}*New INTC lead: Tier ${s.lead_tier}*\n*${record.first_name} ${record.last_name}*  |  ${record.phone}  |  ${record.email}` } },
         { type: 'section', fields: [
-          { type: 'mrkdwn', text: `*Class period cost basis*\n${fmt(s.class_period_cost_basis)}` },
-          { type: 'mrkdwn', text: `*Shares / avg cost*\n${s.class_period_shares.toLocaleString('en-US')} @ $${s.avg_cost_per_share}` },
-          { type: 'mrkdwn', text: `*Purchases in period*\n${s.class_period_purchases} (${s.first_purchase || '-'} to ${s.last_purchase || '-'})` },
+          { type: 'mrkdwn', text: `*Amount invested*\n${s.amount_label}` },
+          { type: 'mrkdwn', text: `*When bought*\n${s.purchase_window_labels.join(', ') || '-'}${s.also_bought_outside_period ? ' (+ outside period)' : ''}` },
           { type: 'mrkdwn', text: `*Source*\n${src}` },
           { type: 'mrkdwn', text: `*OK to text/call*\n${record.consent?.sms_calls ? 'Yes' : 'No'}` },
         ] },
@@ -166,7 +167,7 @@ module.exports = async (req, res) => {
   jobs.push(pushPipedrive(record, s));
 
   await Promise.all(jobs);
-  console.log(`[lead] ${record.lead_id} tier=${s.lead_tier} basis=${s.class_period_cost_basis} src=${record.utm_source || record.gclid ? 'paid' : 'direct'}`);
+  console.log(`[lead] ${record.lead_id} tier=${s.lead_tier} amount=${s.amount_bucket} src=${record.utm_source || record.gclid ? 'paid' : 'direct'}`);
 
   return res.status(200).json({ ok: true, lead_tier: s.lead_tier, priority: s.priority, value: s.value });
 };

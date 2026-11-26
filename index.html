@@ -117,11 +117,11 @@
   label.f{display:block;font-size:14px;font-weight:500;color:#3b4656;margin:0 0 16px}
   label.f input{display:block;width:100%;margin-top:6px;padding:13px 14px;border:1px solid #d5dbe5;border-radius:6px;font:inherit;font-size:16px;color:var(--ink);background:#fff}
   .adv-strip{background:var(--navy);color:#c9d2e3;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;text-align:center;padding:6px 12px}
-  .consents{border-top:1px solid var(--line);padding-top:16px;margin-top:2px}
   .consent a{color:var(--steel)}
   .consent em{font-style:normal;color:#8a94a3}
   .consent.req em{color:var(--red)}
-  .confnote{font-size:12.5px;color:var(--muted);margin:-8px 0 18px;padding-left:26px}
+  .fine{font-size:12px;color:var(--muted);line-height:1.5;margin:12px 0 0;text-align:center}
+  .fine a{color:var(--muted)}
   .consent{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted);line-height:1.55;margin:0 0 14px}
   .consent input{margin-top:3px;flex:none}
   .btn{display:block;width:100%;background:var(--navy);color:#fff;border:0;padding:16px 22px;border-radius:6px;font:inherit;font-weight:500;font-size:16px;cursor:pointer;transition:background .15s}
@@ -290,20 +290,12 @@
           </div>
           <label class="f">Email<input name="email" type="email" autocomplete="email" required></label>
           <label class="f">Phone<input name="phone" type="tel" autocomplete="tel" required></label>
-          <div class="consents">
-            <label class="consent req"><input type="checkbox" name="ack" required>
-              <span id="ackText">I understand that submitting this form does not create an attorney-client relationship, and that the firm will decide whether to contact me. I agree to the <a href="https://schallfirm.com/terms-and-conditions/" target="_blank" rel="noopener">Terms</a>, <a href="https://schallfirm.com/privacy-policy/" target="_blank" rel="noopener">Privacy Policy</a> and <a href="https://schallfirm.com/disclaimer/" target="_blank" rel="noopener">Disclaimer</a>. <em>(Required)</em></span>
-            </label>
-            <label class="consent"><input type="checkbox" name="sms_consent">
-              <span id="smsText">I agree that Schall, Brown &amp; Schwartz LLP may call and text me about this matter at the number above, including by automated means. Consent is not a condition of submitting this form or hiring the firm. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help. <em>(Optional)</em></span>
-            </label>
-            <label class="consent"><input type="checkbox" name="email_updates">
-              <span id="emailText">Send me email updates about the Intel case. You can unsubscribe at any time. <em>(Optional)</em></span>
-            </label>
-          </div>
-          <p class="confnote">Your information is kept confidential. Please don't include account numbers or other sensitive details in this form.</p>
+          <label class="consent"><input type="checkbox" name="contact_consent">
+            <span id="consentText">Yes, Schall, Brown &amp; Schwartz LLP may call, text (including by automated means) and email me about this case. Not required to submit. Msg &amp; data rates may apply; reply STOP to opt out.</span>
+          </label>
           <input type="text" name="company_website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
           <button type="submit" class="btn" id="submitBtn">Submit for free review</button>
+          <p class="fine" id="ackText">By submitting, you agree to our <a href="https://schallfirm.com/terms-and-conditions/" target="_blank" rel="noopener">Terms</a>, <a href="https://schallfirm.com/privacy-policy/" target="_blank" rel="noopener">Privacy Policy</a> and <a href="https://schallfirm.com/disclaimer/" target="_blank" rel="noopener">Disclaimer</a>, and understand this does not create an attorney-client relationship. Please don't include account numbers.</p>
           <p class="err" id="err"></p>
           <div class="nav"><button type="button" class="back" data-back>&larr; Back</button></div>
         </div>
@@ -587,7 +579,6 @@
     for (var i=0;i<req.length;i++){ if (!String(fd.get(req[i])||'').trim()){ err.textContent = 'Please fill in your name, email, and phone.'; return; } }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fd.get('email'))){ err.textContent = 'Please enter a valid email address.'; return; }
     if (String(fd.get('phone')).replace(/\D/g,'').length < 10){ err.textContent = 'Please enter a valid phone number.'; return; }
-    if (!fd.get('ack')){ err.textContent = 'Please check the required box to continue.'; return; }
 
     var ps = purchases().filter(function(p){ return p.date && p.shares && p.price; })
       .map(function(p){ return {date: p.date, shares: p.shares, price: p.price}; });
@@ -599,12 +590,11 @@
       email: fd.get('email').trim(), phone: fd.get('phone').trim(), event_id: eventId,
       consent: {
         acknowledged_no_relationship: true,
-        sms_calls: !!fd.get('sms_consent'),
-        email_updates: !!fd.get('email_updates'),
-        version: 'intc-2026-11-26',
+        sms_calls: !!fd.get('contact_consent'),
+        email_updates: !!fd.get('contact_consent'),
+        version: 'intc-2026-11-26b',
+        consent_text: fd.get('contact_consent') ? document.getElementById('consentText').textContent.trim() : null,
         ack_text: document.getElementById('ackText').textContent.trim(),
-        sms_text: fd.get('sms_consent') ? document.getElementById('smsText').textContent.trim() : null,
-        email_text: fd.get('email_updates') ? document.getElementById('emailText').textContent.trim() : null,
         captured_at: new Date().toISOString()
       },
       fbp: cookie('_fbp'), fbc: cookie('_fbc') || (attr.fbclid ? 'fb.1.' + Date.now() + '.' + attr.fbclid : ''),
